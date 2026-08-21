@@ -36,10 +36,10 @@ agent_created: true
 
 ## git 集成（设计块启用后生效）
 
-- 设计块步骤 2 问"需要 git 版本管理吗"（推荐需要）；需要则 `git init` + `.gitignore`（`engineer_doc/`、`ui-preview/` 提交；`node_modules`、`dist`、`target`、`.idea` 等排除）+ 初始 commit；
-- **提交时机**：启用后**每块 / 每批结束提交一次**——`git add -A && git commit -m '<type>(<scope>): <摘要>'`；
+- 设计块步骤 2 **必问**"需要 git 版本管理吗"（推荐需要）；需要则 `git init` + `.gitignore`（`engineer_doc/`、`ui-preview/` 提交；`node_modules`、`dist`、`target`、`.idea` 等排除）+ 初始 commit；
+- ⚠️ **强制提交**：启用后**每块 / 每批结束必须提交一次，无例外、不可跳过**——在块结束摘要与选择权**之前**先完成：`git add -A && git commit -m '<type>(<scope>): <摘要>'`；
 - **commit 规范**：type = `feat` / `fix` / `refactor` / `docs` / `chore`；scope = 块或模块。例：`feat(design): 总设计文档`、`feat(dev): 批次A 6点通过`、`fix: 登录页色值`、`chore: 停滞记录`；
-- 停滞 / 异常状态也提交（保证跨会话可回滚）。
+- 停滞 / 异常状态也提交（保证跨会话可回滚）；**提交优先于块结束动作，遗忘即流程错误**。
 
 ## 必读清单（动手前按块读，勿跳过）
 

@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UI 批注板模板 · 打开即用（右键任意组件批注）</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif; background: #1e1e1e; color: #e8e8e8; }
+  /* 示例页面（替换为你的目标 UI；每个可批注元素埋 data-ui + data-label） */
+  .demo { max-width: 720px; margin: 48px auto; padding: 24px; background: #252526; border: 1px solid #3e3e42; border-radius: 10px; }
+  .demo h1 { font-size: 18px; margin-bottom: 8px; }
+  .demo p { color: #8a8a8a; font-size: 12px; margin-bottom: 20px; }
+  .demo .row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .demo button { padding: 8px 18px; border-radius: 6px; border: none; font-size: 13px; cursor: pointer; background: #185fa5; color: #fff; }
+  .demo button.ghost { background: transparent; border: 1px solid #3e3e42; color: #e8e8e8; }
+  .demo .card { margin-top: 20px; padding: 14px; background: #1e1e1e; border: 1px solid #3e3e42; border-radius: 8px; }
+  .demo .card h3 { font-size: 14px; margin-bottom: 6px; }
+  .demo .card input { width: 100%; padding: 8px 10px; border-radius: 6px; border: 1px solid #3e3e42; background: #2d2d30; color: #e8e8e8; font-size: 13px; margin-top: 8px; }
+  /* 提示条 */
+  .howto { max-width: 720px; margin: 24px auto 0; padding: 12px 16px; background: #2d2d30; border: 1px solid #f0a020; border-radius: 8px; font-size: 12px; color: #f0a020; line-height: 1.8; }
+  .howto b { color: #fff; }
+</style>
+</head>
+<body>
+
+<div class="howto">
+  <b>使用说明：</b>① 把你的目标 UI（HTML/组件）替换掉下面的示例；② 每个可批注元素加 <code>data-ui="区域.模块.子组件"</code>（如 titlebar.menu.edit）+ <code>data-label="人类可读名"</code>；
+  ③ 引入批注脚本（本页已内嵌 annotate.js）；④ 打开页面 → 右键任意组件批注 → 「复制」粘贴给 AI。
+</div>
+
+<!-- ═══ 示例 UI（替换为你的目标页面） ═══ -->
+<div class="demo">
+  <h1 data-ui="demo.header" data-label="示例-标题">批注模板演示</h1>
+  <p data-ui="demo.sub" data-label="示例-副标题">右键下面任意组件试试：无批注 → 新建；有批注 → 再次右键显示/编辑</p>
+  <div class="row">
+    <button data-ui="demo.btn-primary" data-label="示例-主按钮">主按钮</button>
+    <button class="ghost" data-ui="demo.btn-ghost" data-label="示例-次按钮">次按钮</button>
+  </div>
+  <div class="card" data-ui="demo.card" data-label="示例-卡片">
+    <h3 data-ui="demo.card.title" data-label="示例-卡片标题">输入框卡片</h3>
+    <input data-ui="demo.card.input" data-label="示例-输入框" placeholder="输入内容…">
+  </div>
+</div>
+
+<!-- ═══ 批注脚本（annotate.js：悬浮工具栏 + 右键单批注 + localStorage + 导出/复制） ═══ -->
+<script>
+(function () {
+  if (window.__ubcAnnotateLoaded) return;
+  window.__ubcAnnotateLoaded = true;
+
+  var LS_KEY = 'ubc-annotations';
+
+  var css = [
+    '.ubc-annot-bar{position:fixed;top:8px;right:12px;z-index:99999;display:flex;align-items:center;gap:8px;background:#2d2d30;border:1px solid #f0a020;border-radius:8px;padding:6px 12px;box-shadow:0 4px 16px rgba(0,0,0,.5);font:12px/1.4 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif}',
+    '.ubc-annot-bar b{color:#f0a020;font-size:12px}',
+    '.ubc-annot-bar button{background:#185fa5;color:#fff;border:none;padding:4px 12px;border-radius:4px;font-size:12px;cursor:pointer}',
+    '.ubc-annot-bar button.ghost{background:#3e3e42;color:#e8e8e8}',
+    '.ubc-annot-bar .hint{font-size:11px;color:#8a8a8a}',
+    '.ubc-annot-bar .close{background:transparent!important;color:#8a8a8a!important;padding:2px 6px!important}',
+    '.ubc-annot-bubble{position:fixed;z-index:100000;width:300px;background:#2d2d30;border:1px solid #f0a020;border-radius:8px;padding:12px;box-shadow:0 8px 32px rgba(0,0,0,.6);font:12px/1.4 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;color:#e8e8e8}',
+    '.ubc-annot-bubble .ui{font-size:11px;color:#f0a020;font-family:Consolas,monospace;word-break:break-all}',
+    '.ubc-annot-bubble .label{font-size:12px;font-weight:600;margin:6px 0;display:flex;justify-content:space-between}',
+    '.ubc-annot-bubble .exists{font-size:10px;font-weight:400;color:#f0a020}',
+    '.ubc-annot-bubble textarea{width:100%;background:#1e1e1e;color:#e8e8e8;border:1px solid #3e3e42;border-radius:4px;padding:8px;font-size:12px;outline:none;resize:vertical;min-height:64px;font-family:inherit}',
+    '.ubc-annot-bubble .actions{display:flex;gap:8px;margin-top:8px;justify-content:flex-end}',
+    '.ubc-annot-bubble .actions button{padding:5px 14px;border-radius:4px;font-size:12px;cursor:pointer;border:none;background:#3e3e42;color:#e8e8e8}',
+    '.ubc-annot-bubble .actions .del{background:transparent;color:#f14c4c;border:1px solid #f14c4c;padding:4px 12px}',
+    '.ubc-annot-bubble .actions .save{background:#f0a020;color:#1e1e1e;font-weight:600}',
+    '[data-ui]:hover{outline:1px dashed rgba(240,160,32,.8);outline-offset:1px}',
+  ].join('');
+  var styleEl = document.createElement('style');
+  styleEl.textContent = css;
+  document.head.appendChild(styleEl);
+
+  function loadSaved() {
+    try { return JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch (e) { return {}; }
+  }
+  var annots = loadSaved();
+
+  function findUi(el) {
+    var cur = el;
+    while (cur && cur !== document.body) {
+      if (cur.hasAttribute && cur.hasAttribute('data-ui')) return cur;
+      cur = cur.parentElement;
+    }
+    return null;
+  }
+
+  var bar = document.createElement('div');
+  bar.className = 'ubc-annot-bar';
+  function renderBar() {
+    var n = Object.keys(annots).length;
+    bar.innerHTML =
+      '<b>批注 ' + n + ' 条</b>' +
+      '<button id="ubc-export">导出 JSON</button>' +
+      '<button id="ubc-copy" class="ghost">复制</button>' +
+      '<button id="ubc-clear" class="ghost">清空</button>' +
+      '<span class="hint">右键任意组件批注 · 一个组件一条</span>' +
+      '<button class="close" id="ubc-hide">✕</button>';
+    bar.querySelector('#ubc-export').onclick = exportJson;
+    bar.querySelector('#ubc-copy').onclick = copyJson;
+    bar.querySelector('#ubc-clear').onclick = function () {
+      if (confirm('清空全部批注？')) { annots = {}; localStorage.setItem(LS_KEY, '{}'); renderBar(); }
+    };
+    bar.querySelector('#ubc-hide').onclick = function () { bar.style.display = 'none'; showBtn.style.display = 'block'; };
+  }
+  document.body.appendChild(bar);
+  renderBar();
+
+  var showBtn = document.createElement('button');
+  showBtn.textContent = '批注';
+  showBtn.style.cssText = 'position:fixed;top:8px;right:12px;z-index:99999;display:none;background:#2d2d30;border:1px solid #f0a020;border-radius:6px;padding:4px 12px;font-size:12px;color:#f0a020;cursor:pointer';
+  showBtn.onclick = function () { showBtn.style.display = 'none'; bar.style.display = 'flex'; };
+  document.body.appendChild(showBtn);
+
+  var bubble = null;
+  document.addEventListener('contextmenu', function (e) {
+    var uiEl = findUi(e.target);
+    if (!uiEl) return;
+    e.preventDefault();
+    var ui = uiEl.getAttribute('data-ui');
+    var label = uiEl.getAttribute('data-label') || ui;
+    var existing = annots[ui];
+    showBubble(ui, label, existing ? existing.text : '', Boolean(existing), e.clientX, e.clientY);
+  });
+
+  function showBubble(ui, label, text, editing, x, y) {
+    closeBubble();
+    bubble = document.createElement('div');
+    bubble.className = 'ubc-annot-bubble';
+    bubble.innerHTML =
+      '<div class="ui">' + ui + '</div>' +
+      '<div class="label">' + label + (editing ? '<span class="exists">已有批注（编辑中）</span>' : '') + '</div>' +
+      '<textarea placeholder="写批注…"></textarea>' +
+      '<div class="actions">' +
+      (editing ? '<button class="del">删除</button><div style="flex:1"></div>' : '<div style="flex:1"></div>') +
+      '<button class="cancel">取消</button>' +
+      '<button class="save">' + (editing ? '更新' : '保存') + '</button>' +
+      '</div>';
+    document.body.appendChild(bubble);
+
+    var ta = bubble.querySelector('textarea');
+    ta.value = text;
+    ta.focus();
+
+    var bw = bubble.offsetWidth, bh = bubble.offsetHeight;
+    bubble.style.left = Math.max(8, Math.min(x, window.innerWidth - bw - 12)) + 'px';
+    bubble.style.top = Math.max(8, Math.min(y + 14, window.innerHeight - bh - 12)) + 'px';
+
+    bubble.querySelector('.cancel').onclick = closeBubble;
+    bubble.querySelector('.save').onclick = function () {
+      var v = ta.value.trim();
+      if (!v) return;
+      annots[ui] = { ui: ui, label: label, text: v, time: new Date().toISOString() };
+      localStorage.setItem(LS_KEY, JSON.stringify(annots));
+      renderBar();
+      closeBubble();
+    };
+    var delBtn = bubble.querySelector('.del');
+    if (delBtn) delBtn.onclick = function () {
+      delete annots[ui];
+      localStorage.setItem(LS_KEY, JSON.stringify(annots));
+      renderBar();
+      closeBubble();
+    };
+    document.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Escape') { closeBubble(); }
+    });
+  }
+
+  function closeBubble() { if (bubble) { bubble.remove(); bubble = null; } }
+
+  function exportJson() {
+    var list = Object.values(annots);
+    if (!list.length) return alert('还没有批注，右键任意组件添加');
+    var blob = new Blob([JSON.stringify(list, null, 2)], { type: 'application/json' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'ui-annotations.json';
+    a.click();
+  }
+
+  function copyJson() {
+    var list = Object.values(annots);
+    if (!list.length) return alert('还没有批注');
+    var json = JSON.stringify(list, null, 2);
+    if (navigator.clipboard) navigator.clipboard.writeText(json).then(function () { alert('已复制 ' + list.length + ' 条批注，粘贴给 AI'); });
+    else alert(json);
+  }
+})();
+</script>
+</body>
+</html>
