@@ -1,6 +1,6 @@
 # engineer · 树状三级项目文档协作技能族
 
-一套轻量、自包含的 AI 协作开发流程技能（WorkBuddy / CodeBuddy Skill）。
+一套轻量、自包含的 AI 协作开发流程技能（SKILL.md + frontmatter 格式，按 Agent Skills 开放约定分发）。
 配合 `engineer_doc/` 树状项目文档：**设计 → 开发 → 测试**，跨会话不断档。
 
 ## 为什么
@@ -24,7 +24,7 @@
 
 ## 安装
 
-把这 5 个目录整体复制到你的 skills 目录（用户级 `~/.workbuddy/skills/` 或项目级 `.workbuddy/skills/`）：
+把这 5 个目录整体复制到你的技能目录（路径按运行环境而定，例如用户级 `~/.workbuddy/skills/`，或把它放在你所用 AI 助手扫描技能的位置）：
 
 ```
 engineer/
@@ -34,7 +34,7 @@ eng-test/
 eng-ui-tooling/
 ```
 
-5 个必须一起存在（hub 通过 Skill 工具路由到子技能）。`eng-ui-tooling` 的
+5 个必须一起存在（hub 负责按需加载路由到子技能）。`eng-ui-tooling` 的
 能力 A 前端注入层资产（annotate.js / data-ui 规范 / 注入方式）已**内置**于
 自身 `assets/` 与 `references/`，无需额外安装 `live-annotate`。
 
