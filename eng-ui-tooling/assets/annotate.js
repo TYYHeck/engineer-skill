@@ -1,56 +1,26 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>UI 批注板模板 · 打开即用（右键任意组件批注）</title>
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif; background: #1e1e1e; color: #e8e8e8; }
-  /* 示例页面（替换为你的目标 UI；每个可批注元素埋 data-ui + data-label） */
-  .demo { max-width: 720px; margin: 48px auto; padding: 24px; background: #252526; border: 1px solid #3e3e42; border-radius: 10px; }
-  .demo h1 { font-size: 18px; margin-bottom: 8px; }
-  .demo p { color: #8a8a8a; font-size: 12px; margin-bottom: 20px; }
-  .demo .row { display: flex; gap: 10px; flex-wrap: wrap; }
-  .demo button { padding: 8px 18px; border-radius: 6px; border: none; font-size: 13px; cursor: pointer; background: #185fa5; color: #fff; }
-  .demo button.ghost { background: transparent; border: 1px solid #3e3e42; color: #e8e8e8; }
-  .demo .card { margin-top: 20px; padding: 14px; background: #1e1e1e; border: 1px solid #3e3e42; border-radius: 8px; }
-  .demo .card h3 { font-size: 14px; margin-bottom: 6px; }
-  .demo .card input { width: 100%; padding: 8px 10px; border-radius: 6px; border: 1px solid #3e3e42; background: #2d2d30; color: #e8e8e8; font-size: 13px; margin-top: 8px; }
-  /* 提示条 */
-  .howto { max-width: 720px; margin: 24px auto 0; padding: 12px 16px; background: #2d2d30; border: 1px solid #f0a020; border-radius: 8px; font-size: 12px; color: #f0a020; line-height: 1.8; }
-  .howto b { color: #fff; }
-</style>
-</head>
-<body>
-
-<div class="howto">
-  <b>使用说明：</b>① 把你的目标 UI（HTML/组件）替换掉下面的示例；② 每个可批注元素加 <code>data-ui="区域.模块.子组件"</code>（如 titlebar.menu.edit）+ <code>data-label="人类可读名"</code>；
-  ③ 引入批注脚本（本页已内嵌 annotate.js）；④ 打开页面 → 右键任意组件批注 → 「复制」粘贴给 AI。
-</div>
-
-<!-- ═══ 示例 UI（替换为你的目标页面） ═══ -->
-<div class="demo">
-  <h1 data-ui="demo.header" data-label="示例-标题">批注模板演示</h1>
-  <p data-ui="demo.sub" data-label="示例-副标题">右键下面任意组件试试：无批注 → 新建；有批注 → 再次右键显示/编辑</p>
-  <div class="row">
-    <button data-ui="demo.btn-primary" data-label="示例-主按钮">主按钮</button>
-    <button class="ghost" data-ui="demo.btn-ghost" data-label="示例-次按钮">次按钮</button>
-  </div>
-  <div class="card" data-ui="demo.card" data-label="示例-卡片">
-    <h3 data-ui="demo.card.title" data-label="示例-卡片标题">输入框卡片</h3>
-    <input data-ui="demo.card.input" data-label="示例-输入框" placeholder="输入内容…">
-  </div>
-</div>
-
-<!-- ═══ 批注脚本（annotate.js：悬浮工具栏 + 右键单批注 + localStorage + 导出/复制） ═══ -->
-<script>
+/**
+ * ui-byte-canvas · UI 批注层模板（纯脚本，注入任意静态页面即可用）
+ * 定稿标准（engineer 技能 ui_design.md 批注闭环）：
+ *  - 悬浮批注工具栏（右上角，可收起）
+ *  - 右键任意 [data-ui] 组件 → 弹出批注窗口
+ *  - 一个组件只能有一个批注（按 data-ui 唯一键）：无→新建；有→再次右键显示当前批注（可改/删）
+ *  - localStorage 持久化（key: ubc-annotations），刷新不丢
+ *  - 导出 JSON / 复制 JSON 交 AI
+ *
+ * 使用：
+ *  1. 在目标页面每个可批注元素加 data-ui（层级点分路径）+ data-label（人类可读名）
+ *  2. 引入本脚本：<script src="annotate.js"></script>（或复制本文件内容到页面内）
+ *  3. 打开页面 → 右键任意组件批注 → 「复制」粘贴给 AI
+ *
+ * 依赖：无（原生 JS + CSS 内联注入，任何框架/纯 HTML 均可）
+ */
 (function () {
   if (window.__ubcAnnotateLoaded) return;
   window.__ubcAnnotateLoaded = true;
 
   var LS_KEY = 'ubc-annotations';
 
+  // ── 样式注入 ──
   var css = [
     '.ubc-annot-bar{position:fixed;top:8px;right:12px;z-index:99999;display:flex;align-items:center;gap:8px;background:#2d2d30;border:1px solid #f0a020;border-radius:8px;padding:6px 12px;box-shadow:0 4px 16px rgba(0,0,0,.5);font:12px/1.4 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif}',
     '.ubc-annot-bar b{color:#f0a020;font-size:12px}',
@@ -68,13 +38,21 @@
     '.ubc-annot-bubble .actions .del{background:transparent;color:#f14c4c;border:1px solid #f14c4c;padding:4px 12px}',
     '.ubc-annot-bubble .actions .save{background:#f0a020;color:#1e1e1e;font-weight:600}',
     '[data-ui]:hover{outline:1px dashed rgba(240,160,32,.8);outline-offset:1px}',
+    '.ubc-has-annot{outline:2px solid #f0a020!important;outline-offset:2px!important}',
+    '.ubc-has-annot:hover{outline:2px solid #f0a020!important;outline-offset:2px!important}',
+    '.ubc-badge{position:fixed;z-index:99998;min-width:16px;height:16px;padding:0 4px;background:#f0a020;color:#1e1e1e;font:700 11px/16px -apple-system,"Microsoft YaHei",sans-serif;border-radius:999px;display:flex;align-items:center;justify-content:center;pointer-events:none;box-shadow:0 1px 4px rgba(0,0,0,.4)}',
   ].join('');
   var styleEl = document.createElement('style');
   styleEl.textContent = css;
   document.head.appendChild(styleEl);
 
+  // ── 数据 ──
   function loadSaved() {
-    try { return JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch (e) { return {}; }
+    try {
+      return JSON.parse(localStorage.getItem(LS_KEY) || '{}');
+    } catch (e) {
+      return {};
+    }
   }
   var annots = loadSaved();
 
@@ -87,6 +65,39 @@
     return null;
   }
 
+  function positionBadge(b, el) {
+    var r = el.getBoundingClientRect();
+    b.style.left = (r.left + r.width - 8) + 'px';
+    b.style.top = (r.top - 8) + 'px';
+  }
+  var _ubcReposT = null;
+  function scheduleRepos() {
+    if (_ubcReposT) clearTimeout(_ubcReposT);
+    _ubcReposT = setTimeout(function () {
+      document.querySelectorAll('.ubc-badge').forEach(function (b) {
+        var ui = b.getAttribute('data-ui-ref');
+        var el = document.querySelector('[data-ui="' + ui + '"]');
+        if (el) positionBadge(b, el);
+      });
+    }, 60);
+  }
+  function refreshBadges() {
+    document.querySelectorAll('.ubc-badge').forEach(function (b) { b.remove(); });
+    Object.keys(annots).forEach(function (ui) {
+      var el = document.querySelector('[data-ui="' + ui + '"]');
+      if (!el) return;
+      el.classList.add('ubc-has-annot');
+      var b = document.createElement('div');
+      b.className = 'ubc-badge';
+      b.textContent = '!';
+      b.setAttribute('data-ui-ref', ui);
+      document.body.appendChild(b);
+      positionBadge(b, el);
+    });
+    scheduleRepos();
+  }
+
+  // ── 悬浮工具栏 ──
   var bar = document.createElement('div');
   bar.className = 'ubc-annot-bar';
   function renderBar() {
@@ -101,19 +112,32 @@
     bar.querySelector('#ubc-export').onclick = exportJson;
     bar.querySelector('#ubc-copy').onclick = copyJson;
     bar.querySelector('#ubc-clear').onclick = function () {
-      if (confirm('清空全部批注？')) { annots = {}; localStorage.setItem(LS_KEY, '{}'); renderBar(); }
+      if (confirm('清空全部批注？')) {
+        annots = {};
+        localStorage.setItem(LS_KEY, '{}');
+        renderBar();
+      }
     };
-    bar.querySelector('#ubc-hide').onclick = function () { bar.style.display = 'none'; showBtn.style.display = 'block'; };
+    bar.querySelector('#ubc-hide').onclick = function () {
+      bar.style.display = 'none';
+      showBtn.style.display = 'block';
+    };
+    refreshBadges();
   }
   document.body.appendChild(bar);
   renderBar();
 
   var showBtn = document.createElement('button');
   showBtn.textContent = '批注';
-  showBtn.style.cssText = 'position:fixed;top:8px;right:12px;z-index:99999;display:none;background:#2d2d30;border:1px solid #f0a020;border-radius:6px;padding:4px 12px;font-size:12px;color:#f0a020;cursor:pointer';
-  showBtn.onclick = function () { showBtn.style.display = 'none'; bar.style.display = 'flex'; };
+  showBtn.style.cssText =
+    'position:fixed;top:8px;right:12px;z-index:99999;display:none;background:#2d2d30;border:1px solid #f0a020;border-radius:6px;padding:4px 12px;font-size:12px;color:#f0a020;cursor:pointer';
+  showBtn.onclick = function () {
+    showBtn.style.display = 'none';
+    bar.style.display = 'flex';
+  };
   document.body.appendChild(showBtn);
 
+  // ── 右键批注窗口（单组件单批注） ──
   var bubble = null;
   document.addEventListener('contextmenu', function (e) {
     var uiEl = findUi(e.target);
@@ -144,7 +168,9 @@
     ta.value = text;
     ta.focus();
 
-    var bw = bubble.offsetWidth, bh = bubble.offsetHeight;
+    // 定位防溢出
+    var bw = bubble.offsetWidth;
+    var bh = bubble.offsetHeight;
     bubble.style.left = Math.max(8, Math.min(x, window.innerWidth - bw - 12)) + 'px';
     bubble.style.top = Math.max(8, Math.min(y + 14, window.innerHeight - bh - 12)) + 'px';
 
@@ -158,21 +184,33 @@
       closeBubble();
     };
     var delBtn = bubble.querySelector('.del');
-    if (delBtn) delBtn.onclick = function () {
-      delete annots[ui];
-      localStorage.setItem(LS_KEY, JSON.stringify(annots));
-      renderBar();
-      closeBubble();
+    if (delBtn) {
+      delBtn.onclick = function () {
+        delete annots[ui];
+        localStorage.setItem(LS_KEY, JSON.stringify(annots));
+        renderBar();
+        closeBubble();
+      };
+    }
+    // Escape 关闭
+    var onKey = function (ev) {
+      if (ev.key === 'Escape') {
+        closeBubble();
+        document.removeEventListener('keydown', onKey);
+      }
     };
-    document.addEventListener('keydown', function (ev) {
-      if (ev.key === 'Escape') { closeBubble(); }
-    });
+    document.addEventListener('keydown', onKey);
   }
 
-  function closeBubble() { if (bubble) { bubble.remove(); bubble = null; } }
+  function closeBubble() {
+    if (bubble) {
+      bubble.remove();
+      bubble = null;
+    }
+  }
 
   function exportJson() {
-    var list = Object.values(annots);
+    var list = Object.values(annots).map(function (a) { return { ui: a.ui, text: a.text }; });
     if (!list.length) return alert('还没有批注，右键任意组件添加');
     var blob = new Blob([JSON.stringify(list, null, 2)], { type: 'application/json' });
     var a = document.createElement('a');
@@ -182,13 +220,15 @@
   }
 
   function copyJson() {
-    var list = Object.values(annots);
+    var list = Object.values(annots).map(function (a) { return { ui: a.ui, text: a.text }; });
     if (!list.length) return alert('还没有批注');
     var json = JSON.stringify(list, null, 2);
-    if (navigator.clipboard) navigator.clipboard.writeText(json).then(function () { alert('已复制 ' + list.length + ' 条批注，粘贴给 AI'); });
-    else alert(json);
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(json).then(function () {
+        alert('已复制 ' + list.length + ' 条批注到剪贴板，直接粘贴给 AI。批注落实后点「清空」清除，勿带旧批注进下一轮');
+      });
+    } else {
+      alert(json);
+    }
   }
 })();
-</script>
-</body>
-</html>

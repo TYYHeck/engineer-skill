@@ -1,87 +1,56 @@
-# Engineer Skill — 规范化 Agent 协作开发流程
+# engineer · 树状三级项目文档协作技能族
 
-[English](#english) · [中文](#chinese)
+一套轻量、自包含的 AI 协作开发流程技能（WorkBuddy / CodeBuddy Skill）。
+配合 `engineer_doc/` 树状项目文档：**设计 → 开发 → 测试**，跨会话不断档。
 
-<a id="chinese"></a>
-## 中文
+## 为什么
 
-**engineer** 是一个 WorkBuddy / Claude-style Agent 技能（skill），提供一套**规范化 Agent 协作开发流程**：设计 → 开发（含自测）→ 测试（按需），并配套结构化项目文档体系，保证 AI 跨会话记忆、不丢进度。
+旧版 engineer 臃肿（1 hub + 8 references + 7 模板，强制每次读多个文件）。
+本族改为 **方案 B**：
 
-### 核心特性
+- **位置交给文件夹**：层级 / 父子关系由 `engineer_doc/` 目录结构天然表达，`Glob` 一次拿全树。
+- **状态交给节点头部**：每个节点文件头部一行注释记录 `anchor / parent / status / active / design / path`，状态唯一真源，无中央索引、无双写、不陈旧。
+- **快速取数靠 Grep**：取全图 = `Glob` + `Grep "status:"`；定位 / 读节 / 回弹全用 Grep 命中头部单行。
 
-- **三块流程**：设计（产出总设计文档 `project_plan.md`）→ 开发（按模块逐步实现，自带自测）→ 测试（按需进入：优化 / 修 bug / 补用例 / 深度测试）。
-- **任务状态机**：待设计 / 设计中 / 待开发 / 开发中 / 待测试 / 测试中 / 通过 / 停滞；任务类型：完整 / 设计 / 实现 / 验证 / 修复 / 重构。
-- **结构化文档体系** `engineer_doc/`：主文档 + 同名记录文件夹；命名不带 `_doc` 尾缀，类型由父文件夹决定；`rg` 可秒定位，无记忆也能找。
-- **状态单一事实源**：`<点>/work.md` 唯一事实源，`project_plan.md` 只在收尾回写。
-- **高效提问规范**：优先询问工具（选项 + 自定义输入）、无依赖问题一批多问、推荐/建议/自定义格式、用户已说的不重复问。
-- **UI 可视化设计**：精细档下渲染交互式预览（含控制面板），可配置样式/位置、可搜索精美 UI 参考，边看边打磨。
-- **轻量可调**：文档按需建（小任务只建 work.md），测试块按需进，避免过度文档化。
+## 技能组成
 
-### 安装
+| 技能 | 角色 |
+|------|------|
+| `engineer` | hub：结构 / 锚点系统 / 路由 / 确认定稿闸门 / 级联回弹 |
+| `eng-design` | 设计子技能（平级）：写各级 `## 设计` |
+| `eng-develop` | 开发子技能（平级）：写 `## 开发` + 改头部 status + 触发回弹 |
+| `eng-test` | 测试子技能（平级）：写 `## 测试` + 判定通过驱动门槛 |
+| `eng-ui-tooling` | UI 可视化 / 调试（按需加载）：① 可视化 DEBUG-HTML 批注（前端注入层 + 后端批注服务，资产已内置）② 内嵌式可视化设计 |
 
-将 `SKILL.md`、`references/`、`assets/` 放入技能目录（如 `~/.workbuddy/skills/engineer/`），或直接导入 `engineer.zip`。
+## 安装
 
-### 使用
-
-对 AI 说一句即可触发：
-
-- "帮我做个 XX（全新项目）" → 全流程：设计 → 开发
-- "已有项目，帮我实现登录功能" → 只进开发块
-- "帮我修个 bug / 加些测试用例" → 按需进测试块
-
-### 目录结构
+把这 5 个目录整体复制到你的 skills 目录（用户级 `~/.workbuddy/skills/` 或项目级 `.workbuddy/skills/`）：
 
 ```
 engineer/
-├── SKILL.md                    # 核心：路由 + 三块入口 + 状态机/提问规范导读
-├── references/                 # 按需加载的流程文档
-│   ├── doc_system.md           # 文档体系与查找方式
-│   ├── state_machine.md        # 状态机与任务类型
-│   ├── questioning.md          # 提问规范
-│   ├── design_block.md         # 设计块流程
-│   ├── develop_block.md        # 开发块流程
-│   ├── test_block.md           # 测试块流程（按需）
-│   └── ui_design.md            # UI 可视化设计机制
-└── assets/                     # 可直接复用的模板
-    ├── project_plan_template.md
-    ├── point_template.md
-    ├── work_template.md
-    └── mode_template.md
+eng-design/
+eng-develop/
+eng-test/
+eng-ui-tooling/
 ```
 
-### 许可证
+5 个必须一起存在（hub 通过 Skill 工具路由到子技能）。`eng-ui-tooling` 的
+能力 A 前端注入层资产（annotate.js / data-ui 规范 / 注入方式）已**内置**于
+自身 `assets/` 与 `references/`，无需额外安装 `live-annotate`。
 
-MIT
+## 关键约定
 
----
+- **三态**：`[ ]` 待做 / `[~]` 进行中 / `[x]` 完成；阻塞 / 待审写在正文，不进头部状态。
+- **确认定稿才开工**：对应节点 `## 设计` 未经用户确认定稿（`design: confirmed`），`eng-develop` 不得开始实现。
+- **贯穿维护**：一旦某节点启用 UI 可视化能力（A/B），后续加 UI 须同步回写（`data-ui` 埋点 / 可视化设计子节），标记写在节点 `## 设计` 正文。
+- **零绝对路径**：全族可移植，换机器 / 改目录都能用。
 
-<a id="english"></a>
-## English
+## 文档树
 
-**engineer** is a WorkBuddy / Claude-style agent skill that provides a **standardized Agent collaborative development workflow**: Design → Develop (with self-testing) → Test (on-demand), backed by a structured project documentation system that keeps the AI's memory and progress across sessions.
-
-### Highlights
-
-- **Three blocks**: Design (produces `project_plan.md`) → Develop (module-by-module, self-tested) → Test (on-demand: optimization / bug fix / test cases / deep testing).
-- **Task state machine**: pending-design / designing / pending-dev / developing / pending-test / testing / passed / stalled; task types: full / design / implement / verify / fix / refactor.
-- **Structured docs** `engineer_doc/`: main doc + same-name record folder; no `_doc` suffix, type determined by parent folder; `rg`-findable without memory.
-- **Single source of truth**: `<point>/work.md` is the source; `project_plan.md` synced only on completion.
-- **Efficient questioning**: prefer the question tool (options + free input), batch independent questions, recommend/suggest/custom format, never re-ask what the user already stated.
-- **Visual UI design**: interactive preview with control panel for style/layout, web search for UI references, iterate visually.
-- **Lightweight & tunable**: docs created on demand, test block entered on demand.
-
-### Install
-
-Place `SKILL.md`, `references/`, `assets/` into your skills directory (e.g. `~/.workbuddy/skills/engineer/`), or import `engineer.zip`.
-
-### Usage
-
-Just tell the AI:
-
-- "Build me an X (new project)" → full flow: design → develop
-- "Add a login feature to my existing project" → develop block only
-- "Fix a bug / add test cases" → test block on demand
-
-### License
-
-MIT
+```
+<项目根>/engineer_doc/
+├── GLOBAL.md        # 层级0 全局：分三块（设计/开发/测试），只列模块概览
+├── DISCUSS.md       # 层级0 同目录：设计怎么得出的（来源/决策/被否方案）
+├── <模块>/MODULE.md # 层级1：本模块具体分工设计
+└── <模块>/<功能>/PROGRESS.md  # 层级2：单功能设计/开发/测试
+```
