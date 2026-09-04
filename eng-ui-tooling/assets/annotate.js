@@ -10,7 +10,9 @@
  * 使用：
  *  1. 在目标页面每个可批注元素加 data-ui（层级点分路径）+ data-label（人类可读名）
  *  2. 引入本脚本：<script src="annotate.js"></script>（或复制本文件内容到页面内）
- *  3. 打开页面 → 右键任意组件批注 → 「复制」粘贴给 AI
+ *  3. 打开页面 → 右键（或 Ctrl+Shift+,）任意组件批注 → 「复制」粘贴给 AI
+ *     注：批注层激活期间全局接管右键（禁浏览器原生菜单，含页面自身右键交互）；
+ *     批注层 UI 内（气泡/工具栏）保留原生菜单以便粘贴。
  *
  * 依赖：无（原生 JS + CSS 内联注入，任何框架/纯 HTML 均可）
  */
@@ -56,6 +58,17 @@
   }
   var annots = loadSaved();
 
+  // 非阻塞提示（内嵌浏览器里 alert/confirm 会卡住交互，禁用）
+  var toastEl = null;
+  function toast(text) {
+    if (toastEl) toastEl.remove();
+    toastEl = document.createElement('div');
+    toastEl.textContent = text;
+    toastEl.style.cssText = 'position:fixed;top:52px;right:12px;z-index:2147483647;background:#2d2d30;color:#e8e8e8;border:1px solid #f0a020;border-radius:8px;padding:8px 14px;font:12px/1.4 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;max-width:320px;box-shadow:0 4px 16px rgba(0,0,0,.4)';
+    document.body.appendChild(toastEl);
+    setTimeout(function () { if (toastEl) { toastEl.remove(); toastEl = null; } }, 2600);
+  }
+
   function findUi(el) {
     var cur = el;
     while (cur && cur !== document.body) {
@@ -82,6 +95,8 @@
     }, 60);
   }
   function refreshBadges() {
+    // 先清掉全部残留标记（否则清空批注后 outline 框会留在页面上）
+    document.querySelectorAll('.ubc-has-annot').forEach(function (el) { el.classList.remove('ubc-has-annot'); });
     document.querySelectorAll('.ubc-badge').forEach(function (b) { b.remove(); });
     Object.keys(annots).forEach(function (ui) {
       var el = document.querySelector('[data-ui="' + ui + '"]');
@@ -107,15 +122,24 @@
       '<button id="ubc-export">导出 JSON</button>' +
       '<button id="ubc-copy" class="ghost">复制</button>' +
       '<button id="ubc-clear" class="ghost">清空</button>' +
-      '<span class="hint">右键任意组件批注 · 一个组件一条</span>' +
+      '<span class="hint">右键 或 Ctrl+Shift+, 批注组件 · 一个组件一条</span>' +
       '<button class="close" id="ubc-hide">✕</button>';
     bar.querySelector('#ubc-export').onclick = exportJson;
     bar.querySelector('#ubc-copy').onclick = copyJson;
     bar.querySelector('#ubc-clear').onclick = function () {
-      if (confirm('清空全部批注？')) {
+      // 两步确认（不用 confirm()，内嵌浏览器会卡）
+      var btn = this;
+      if (btn.dataset.armed) {
         annots = {};
         localStorage.setItem(LS_KEY, '{}');
         renderBar();
+        toast('已清空全部批注');
+      } else {
+        btn.dataset.armed = '1';
+        btn.textContent = '确认清空？';
+        setTimeout(function () {
+          if (btn.dataset.armed) { delete btn.dataset.armed; btn.textContent = '清空'; }
+        }, 3000);
       }
     };
     bar.querySelector('#ubc-hide').onclick = function () {
@@ -137,17 +161,40 @@
   };
   document.body.appendChild(showBtn);
 
-  // ── 右键批注窗口（单组件单批注） ──
+  // ── 右键 / 快捷键批注窗口（单组件单批注） ──
   var bubble = null;
-  document.addEventListener('contextmenu', function (e) {
-    var uiEl = findUi(e.target);
-    if (!uiEl) return;
-    e.preventDefault();
+  // 记录最后鼠标位置（Ctrl+Shift+, 触发时用它定位）
+  var lastMouse = { x: 0, y: 0 };
+  document.addEventListener('mousemove', function (e) { lastMouse.x = e.clientX; lastMouse.y = e.clientY; }, true);
+
+  function annotateAt(x, y) {
+    var el = document.elementFromPoint(x, y);
+    var uiEl = el ? findUi(el) : null;
+    if (!uiEl) { toast('此处无 data-ui 锚点，换个组件试试'); return; }
     var ui = uiEl.getAttribute('data-ui');
     var label = uiEl.getAttribute('data-label') || ui;
     var existing = annots[ui];
-    showBubble(ui, label, existing ? existing.text : '', Boolean(existing), e.clientX, e.clientY);
-  });
+    showBubble(ui, label, existing ? existing.text : '', Boolean(existing), x, y);
+  }
+
+  // annotate 模式下全局接管右键（捕获阶段）：禁掉浏览器原生菜单与页面自身右键交互，
+  // 命中 data-ui → 弹批注；未命中 → toast 提示。批注层自身 UI 内（气泡/工具栏/兜底框）放行原生菜单（便于粘贴）。
+  document.addEventListener('contextmenu', function (e) {
+    var t = e.target;
+    if (t && t.closest && t.closest('.ubc-annot-bubble,.ubc-annot-bar,#ubc-json-fallback,.ubc-annot-fallback')) return;
+    e.preventDefault();
+    e.stopPropagation();
+    annotateAt(e.clientX, e.clientY);
+  }, true);
+
+  // Ctrl+Shift+, 备选触发（对右键不便/需要保留页面右键的场景）
+  document.addEventListener('keydown', function (e) {
+    if (e.ctrlKey && e.shiftKey && (e.key === ',' || e.code === 'Comma')) {
+      if (/^(INPUT|TEXTAREA)$/.test((e.target && e.target.tagName) || '')) return;
+      e.preventDefault();
+      annotateAt(lastMouse.x, lastMouse.y);
+    }
+  }, true);
 
   function showBubble(ui, label, text, editing, x, y) {
     closeBubble();
@@ -211,24 +258,53 @@
 
   function exportJson() {
     var list = Object.values(annots).map(function (a) { return { ui: a.ui, text: a.text }; });
-    if (!list.length) return alert('还没有批注，右键任意组件添加');
+    if (!list.length) return toast('还没有批注，右键任意组件添加');
     var blob = new Blob([JSON.stringify(list, null, 2)], { type: 'application/json' });
     var a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = 'ui-annotations.json';
     a.click();
+    toast('已导出 ui-annotations.json（' + list.length + ' 条）');
+  }
+
+  function showJsonFallback(json) {
+    var old = document.getElementById('ubc-json-fallback');
+    if (old) old.remove();
+    var wrap = document.createElement('div');
+    wrap.id = 'ubc-json-fallback';
+    wrap.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center';
+    // 点击遮罩空白处可关闭（避免挡住整页交互）
+    wrap.onclick = function (e) { if (e.target === wrap) wrap.remove(); };
+    var box = document.createElement('div');
+    box.style.cssText = 'background:#fff;border-radius:8px;padding:14px;width:min(480px,90vw);box-shadow:0 8px 30px rgba(0,0,0,.25)';
+    box.innerHTML = '<div style="font-size:12px;color:#555;margin-bottom:6px">剪贴板不可用（预览面板受限）——文本已全选，按 Ctrl+C 复制：</div>';
+    var ta = document.createElement('textarea');
+    ta.value = json;
+    ta.style.cssText = 'width:100%;height:200px;font-size:12px;font-family:monospace;border:1px solid #ddd;border-radius:6px;padding:8px;box-sizing:border-box';
+    box.appendChild(ta);
+    var close = document.createElement('button');
+    close.textContent = '关闭';
+    close.style.cssText = 'margin-top:8px;padding:4px 14px;border:none;border-radius:6px;background:#6366f1;color:#fff;cursor:pointer';
+    close.onclick = function () { wrap.remove(); };
+    box.appendChild(close);
+    wrap.appendChild(box);
+    document.body.appendChild(wrap);
+    ta.focus();
+    ta.select();
   }
 
   function copyJson() {
     var list = Object.values(annots).map(function (a) { return { ui: a.ui, text: a.text }; });
-    if (!list.length) return alert('还没有批注');
+    if (!list.length) return toast('还没有批注');
     var json = JSON.stringify(list, null, 2);
-    if (navigator.clipboard) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(json).then(function () {
-        alert('已复制 ' + list.length + ' 条批注到剪贴板，直接粘贴给 AI。批注落实后点「清空」清除，勿带旧批注进下一轮');
+        toast('已复制 ' + list.length + ' 条批注到剪贴板，直接粘贴给 AI。批注落实后点「清空」清除，勿带旧批注进下一轮');
+      }, function () {
+        showJsonFallback(json);
       });
     } else {
-      alert(json);
+      showJsonFallback(json);
     }
   }
 })();
