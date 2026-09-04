@@ -1,7 +1,6 @@
 ---
 name: engineer
 description: 树状三级项目文档协作技能。配合 engineer_doc/ 使用：全局/模块/子 三级，每级一个文档含 设计·开发·测试 三节。位置由文件夹结构天然表达，状态与活跃指针写在每个节点文件头部（单一真源），AI 用 Glob 取树、Grep 取状态，零双写、永远新鲜。当用户要"做一个项目/软件/应用/网站"、"设计/规划"、"开发/加功能"、"修复 bug/测试/验证"，或需要跨会话保持开发进度与任务状态时触发。
-agent_created: true
 ---
 
 # Engineer · 树状三级项目文档协作技能（定稿 v2 · 瘦身方案 B）
@@ -379,6 +378,7 @@ agent_created: true
 
 **外部依赖**
 - **`live-annotate`**：能力 A 的前端注入层资产（`assets/annotate.js` / `vite-annotate-plugin.js` / `references/data-ui-convention.md` / `references/inject-options.md`）**已内置**于 `eng-ui-tooling`，迁移时**无需**目标机共存 `live-annotate`。（仍可单独装 `live-annotate` 作独立技能用，但本族不依赖它。）
+- **annotate.js 与 `perfect-design/assets/annotate.js` 同源**（2026-09 修复三坑后已互同步：禁 alert/confirm 用 toast+两步确认、clipboard 降级全选弹层、清空时移除高亮类）。**今后改 annotate.js 必须两副本同步改**，约束详见 eng-ui-tooling SKILL.md。
 - **`perfect-design`**（软引用，概念借用）：确认闭环哲学来自它，不引用其文件，缺失也不影响功能。
 
 **可移植性保证**
